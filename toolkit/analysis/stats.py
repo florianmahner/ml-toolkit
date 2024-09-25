@@ -12,6 +12,29 @@ Array = np.ndarray
 Tensor = torch.Tensor
 
 
+# ------- Helper Function for Transformations  ------- #
+
+
+def center(x: Array) -> Array:
+    return x - x.mean(0)
+
+
+def standardize(x: Array) -> Array:
+    return (x - x.mean(0)) / x.std(0)
+
+
+def relu(x: Array) -> Array:
+    return np.maximum(0, x)
+
+
+def positive_shift(x: Array) -> Array:
+    return x - np.min(x)
+
+
+def normalize(x: Array) -> Array:
+    return x / np.linalg.norm(x, axis=1, keepdims=True)
+
+
 # ------- Helper Function for Variance Testing  ------- #
 
 
@@ -83,7 +106,9 @@ def split_half_reliability(data: list | Array, num_splits: int = 1000) -> float 
     return corrected_reliability
 
 
-def reproducibility_across_embeddings(i, embeddings, odd_mask, even_mask, n_embeddings, n_dimensions):
+def reproducibility_across_embeddings(
+    i, embeddings, odd_mask, even_mask, n_embeddings, n_dimensions
+):
     """Process a single embedding to calculate the split half reproducibility across all other embeddings and dimensions"""
     reproducibility_across_embeddings = np.zeros((n_embeddings, n_dimensions))
     best_matching_dimensions = np.zeros(n_dimensions)
@@ -102,10 +127,9 @@ def reproducibility_across_embeddings(i, embeddings, odd_mask, even_mask, n_embe
             base_even = emb_i[even_mask][:, k]
             dim_match = highest_corrs[k]
             comp_even = emb_j[even_mask][:, dim_match]
-            even_corrs[k] = vectorized_pearsonr(base_even, comp_even)[0,0]
+            even_corrs[k] = vectorized_pearsonr(base_even, comp_even)[0, 0]
 
         best_matching_dimensions[j] = np.argmax(even_corrs)
-
 
         reproducibility_across_embeddings[j] = even_corrs
 
@@ -115,7 +139,9 @@ def reproducibility_across_embeddings(i, embeddings, odd_mask, even_mask, n_embe
     return back_transformed, best_matching_dimensions
 
 
-def split_half_reliability_across_runs(embeddings: np.ndarray, identifiers: str) -> dict[str, list]:
+def split_half_reliability_across_runs(
+    embeddings: np.ndarray, identifiers: str
+) -> dict[str, list]:
     """
     Compute the split-half reliability of each dimension for each model.
 
