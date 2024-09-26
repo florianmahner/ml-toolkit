@@ -2,7 +2,7 @@ import torch
 import os
 import torch.nn as nn
 import torchvision.models as models
-from .transforms import imagenet_transforms
+from ._transforms import imagenet_transforms
 
 try:
     from torch.hub import load_state_dict_from_url

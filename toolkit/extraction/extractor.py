@@ -4,11 +4,11 @@ import torchvision
 import numpy as np
 
 from tqdm import tqdm
-from .hooks import HookModel
-from .ssl import load_ssl_model
-from .torchvision import load_torchvision_model
-from .open_clip import load_open_clip_model
-from .timm import load_timm_model
+from ._hooks import HookModel
+from ._ssl import load_ssl_model
+from ._torchvision import load_torchvision_model
+from ._open_clip import load_open_clip_model
+from ._timm import load_timm_model
 from ..data.datasets import ImageDataset
 
 from torch.utils.data import DataLoader
@@ -73,7 +73,7 @@ def build_feature_extractor(
 
 
 @torch.no_grad()
-def extract_from_images(model: torch.nn.Module, images: torch.Tensor):
+def _extract_from_images_using_hook(model: HookModel, images: torch.Tensor):
     logits, features = model(images)
     return logits, features
 
@@ -101,7 +101,7 @@ def extract_features_from_model(
     batch_size = dataloader.batch_size
 
     sample_images = next(iter(dataloader)).to(device)
-    sample_features = extract_from_images(extractor, sample_images)[1]
+    sample_features = _extract_from_images_using_hook(extractor, sample_images)[1]
     feature_shape = sample_features.shape[1:]
 
     features = np.empty((num_samples, np.prod(feature_shape)), dtype=np.float32)
@@ -109,7 +109,9 @@ def extract_features_from_model(
     start_idx = 0
     for images in tqdm(dataloader):
         images = images.to(device)
-        batch_logits, batch_features = extract_from_images(extractor, images)
+        batch_logits, batch_features = _extract_from_images_using_hook(
+            extractor, images
+        )
 
         batch_features = batch_features.squeeze().cpu().to(torch.float32).numpy()
         batch_logits = batch_logits.squeeze().cpu().to(torch.float32).numpy()
