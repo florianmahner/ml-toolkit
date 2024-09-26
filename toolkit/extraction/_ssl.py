@@ -3,6 +3,8 @@ import os
 import torch.nn as nn
 import torchvision.models as models
 from ._transforms import imagenet_transforms
+from ._base import BaseModelLoader
+import torchvision
 
 try:
     from torch.hub import load_state_dict_from_url
@@ -42,19 +44,14 @@ MODELS = {
         "type": "vissl",
     },
     "barlowtwins-rn50": {
-        "repository": "facebookresearch/barlowtwins:main",
         "arch": "resnet50",
-        "type": "hub",
-    },
-    "vicreg-rn50": {
-        "repository": "facebookresearch/vicreg:main",
-        "arch": "resnet50",
-        "type": "hub",
+        "type": "checkpoint_url",
+        "checkpoint_url": "https://dl.fbaipublicfiles.com/barlowtwins/ljng/resnet50.pth",
     },
 }
 
 
-def download_model(model_name, save_dir="models"):
+def download_model(model_name, save_dir: str):
     model_info = MODELS.get(model_name)
     if not model_info:
         raise ValueError(f"Model {model_name} not found in MODELS dictionary.")
@@ -64,18 +61,15 @@ def download_model(model_name, save_dir="models"):
     if model_info["type"] == "vissl":
         url = model_info["url"]
         state_dict = load_state_dict_from_url(url, model_dir=save_dir)
+
         # Extract the actual model weights
         if "classy_state_dict" in state_dict:
             state_dict = state_dict["classy_state_dict"]["base_model"]["model"]["trunk"]
         torch.save(state_dict, os.path.join(save_dir, f"{model_name}.pth"))
     elif model_info["type"] == "hub":
         repo = model_info["repository"]
-        model = torch.hub.load(repo, model_info["arch"], pretrained=True)
+        model = torch.hub.load(repo, model_info["arch"], weights="DEFAULT")
         torch.save(model.state_dict(), os.path.join(save_dir, f"{model_name}.pth"))
-    else:
-        raise ValueError(
-            f"Unknown model type {model_info['type']} for model {model_name}."
-        )
 
 
 def clean_state_dict(state_dict):
@@ -84,47 +78,72 @@ def clean_state_dict(state_dict):
     return {k.replace("_feature_blocks.", ""): v for k, v in state_dict.items()}
 
 
-def load_ssl_model(model_name, save_dir="./cache", fresh=False):
-    model_info = MODELS.get(model_name)
-    if not model_info:
-        raise ValueError(f"Model {model_name} not found in MODELS dictionary.")
+class SSLModelLoader(BaseModelLoader):
+    @staticmethod
+    def load(
+        model_name, weights: str | None = "DEFAULT", save_dir="./cache", fresh=True
+    ):
+        model_info = MODELS.get(model_name)
+        if not model_info:
+            raise ValueError(f"Model {model_name} not found in MODELS dictionary.")
 
-    cache_dir = os.path.join(torch.hub.get_dir(), "vissl")
-    model_path = os.path.join(cache_dir, f"{model_name}.pth")
-    if not os.path.exists(model_path) or fresh:
-        download_model(model_name, save_dir)
+        cache_dir = os.path.join(torch.hub.get_dir(), "vissl")
+        model_path = os.path.join(cache_dir, f"{model_name}.pth")
+        if not os.path.exists(model_path) or fresh:
+            download_model(model_name, save_dir)
 
-    if model_info["type"] == "vissl":
-        model_filepath = os.path.join(cache_dir, model_name + ".pth")
-        if not os.path.exists(model_filepath):
-            os.makedirs(cache_dir, exist_ok=True)
-            state_dict = load_state_dict_from_url(
-                model_info["url"], model_dir=cache_dir
+        if model_info["type"] == "vissl":
+            model_filepath = os.path.join(cache_dir, model_name + ".pth")
+            if not os.path.exists(model_filepath):
+                os.makedirs(cache_dir, exist_ok=True)
+                state_dict = load_state_dict_from_url(
+                    model_info["url"], model_dir=cache_dir
+                )
+                # Extract the actual model weights
+                state_dict = clean_state_dict(state_dict)
+                torch.save(state_dict, model_filepath)
+            else:
+                state_dict = torch.load(
+                    model_filepath, map_location=torch.device("cpu")
+                )
+                state_dict = clean_state_dict(state_dict)
+            # Load the model state dict (ie pretrained)
+            model = getattr(models, model_info["arch"])(weights=weights)
+
+            if model_info["arch"] == "resnet50":
+                model.fc = nn.Identity()
+            model.load_state_dict(state_dict, strict=True)
+        elif model_info["type"] == "hub":
+            model = torch.hub.load(
+                model_info["repository"], model_info["arch"], weights=weights
             )
-            # Extract the actual model weights
-            state_dict = clean_state_dict(state_dict)
-            torch.save(state_dict, model_filepath)
+
+            state_dict = torch.load(model_path)
+            # Load the model state dict (ie pretrained)
+            model.load_state_dict(state_dict, strict=True)
+            if model_info["arch"] == "resnet50":
+                model.fc = nn.Identity()
+
+        elif model_info["type"] == "checkpoint_url":
+            # load architecture
+            model = getattr(torchvision.models, model_info["arch"])()
+            if model_info["arch"] == "resnet50":
+                model.fc = torch.nn.Identity()
+
+                # load and cache state_dict
+            state_dict = torch.hub.load_state_dict_from_url(
+                model_info["checkpoint_url"],
+                map_location=torch.device("cpu"),
+                # IMPORTANT that this is unique as it will be used for caching
+                file_name=f"{model_name}.pth",
+            )
+
+            # load state dict to model
+            model.load_state_dict(state_dict, strict=True)
+
         else:
-            state_dict = torch.load(model_filepath, map_location=torch.device("cpu"))
-            state_dict = clean_state_dict(state_dict)
-        # Load the model state dict (ie pretrained)
-        model = getattr(models, model_info["arch"])(weights="DEFAULT")
+            raise ValueError(
+                f"Unknown model type {model_info['type']} for model {model_name}."
+            )
 
-        if model_info["arch"] == "resnet50":
-            model.fc = nn.Identity()
-        model.load_state_dict(state_dict, strict=True)
-    elif model_info["type"] == "hub":
-        model = torch.hub.load(
-            model_info["repository"], model_info["arch"], weights="DEFAULT"
-        )
-        state_dict = torch.load(model_path)
-        # Load the model state dict (ie pretrained)
-        model.load_state_dict(state_dict, strict=True)
-        if model_info["arch"] == "resnet50":
-            model.fc = nn.Identity()
-    else:
-        raise ValueError(
-            f"Unknown model type {model_info['type']} for model {model_name}."
-        )
-
-    return model, imagenet_transforms()
+        return model, imagenet_transforms()

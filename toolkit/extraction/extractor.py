@@ -5,10 +5,10 @@ import numpy as np
 
 from tqdm import tqdm
 from ._hooks import HookModel
-from ._ssl import load_ssl_model
-from ._torchvision import load_torchvision_model
-from ._open_clip import load_open_clip_model
-from ._timm import load_timm_model
+from ._ssl import SSLModelLoader
+from ._torchvision import TorchvisionModelLoader
+from ._open_clip import OpenCLIPLoader
+from ._timm import TimmModelLoader
 from ..data.datasets import ImageDataset
 
 from torch.utils.data import DataLoader
@@ -33,13 +33,13 @@ def load_model(
             "No weights specified, attempting to load model without pretrained weights."
         )
     if source == "open_clip":
-        return load_open_clip_model(model_name, weights)
+        return OpenCLIPLoader.load(model_name, weights)
     if source == "torchvision":
-        return load_torchvision_model(model_name, weights)
+        return TorchvisionModelLoader.load(model_name, weights)
     elif source == "timm":
-        return load_timm_model(model_name, weights)
+        return TimmModelLoader.load(model_name, weights)
     elif source == "ssl":
-        return load_ssl_model(model_name)
+        return SSLModelLoader.load(model_name, weights)
     else:
         raise ValueError(f"Source '{source}' is not recognized.")
 
