@@ -21,4 +21,5 @@ class OpenCLIPLoader(BaseModelLoader):
         model, _, tsfms = open_clip.create_model_and_transforms(
             model_name, pretrained=weights
         )
+
         return model, tsfms

@@ -4,7 +4,6 @@ import torch.nn as nn
 import torchvision.models as models
 from ._transforms import imagenet_transforms
 from ._base import BaseModelLoader
-import torchvision
 
 try:
     from torch.hub import load_state_dict_from_url
@@ -58,18 +57,13 @@ def download_model(model_name, save_dir: str):
 
     os.makedirs(save_dir, exist_ok=True)
 
-    if model_info["type"] == "vissl":
-        url = model_info["url"]
+    if model_info["type"] in ["vissl", "checkpoint_url"]:
+        url = model_info.get("url") or model_info.get("checkpoint_url")
         state_dict = load_state_dict_from_url(url, model_dir=save_dir)
 
-        # Extract the actual model weights
-        if "classy_state_dict" in state_dict:
+        if model_info["type"] == "vissl" and "classy_state_dict" in state_dict:
             state_dict = state_dict["classy_state_dict"]["base_model"]["model"]["trunk"]
         torch.save(state_dict, os.path.join(save_dir, f"{model_name}.pth"))
-    elif model_info["type"] == "hub":
-        repo = model_info["repository"]
-        model = torch.hub.load(repo, model_info["arch"], weights="DEFAULT")
-        torch.save(model.state_dict(), os.path.join(save_dir, f"{model_name}.pth"))
 
 
 def clean_state_dict(state_dict):
@@ -92,14 +86,12 @@ class SSLModelLoader(BaseModelLoader):
         if not os.path.exists(model_path) or fresh:
             download_model(model_name, save_dir)
 
-        if model_info["type"] == "vissl":
+        if model_info["type"] in ["vissl", "checkpoint_url"]:
             model_filepath = os.path.join(cache_dir, model_name + ".pth")
             if not os.path.exists(model_filepath):
                 os.makedirs(cache_dir, exist_ok=True)
-                state_dict = load_state_dict_from_url(
-                    model_info["url"], model_dir=cache_dir
-                )
-                # Extract the actual model weights
+                url = model_info.get("url") or model_info.get("checkpoint_url")
+                state_dict = load_state_dict_from_url(url, model_dir=cache_dir)
                 state_dict = clean_state_dict(state_dict)
                 torch.save(state_dict, model_filepath)
             else:
@@ -107,40 +99,12 @@ class SSLModelLoader(BaseModelLoader):
                     model_filepath, map_location=torch.device("cpu")
                 )
                 state_dict = clean_state_dict(state_dict)
-            # Load the model state dict (ie pretrained)
+
             model = getattr(models, model_info["arch"])(weights=weights)
 
             if model_info["arch"] == "resnet50":
                 model.fc = nn.Identity()
             model.load_state_dict(state_dict, strict=True)
-        elif model_info["type"] == "hub":
-            model = torch.hub.load(
-                model_info["repository"], model_info["arch"], weights=weights
-            )
-
-            state_dict = torch.load(model_path)
-            # Load the model state dict (ie pretrained)
-            model.load_state_dict(state_dict, strict=True)
-            if model_info["arch"] == "resnet50":
-                model.fc = nn.Identity()
-
-        elif model_info["type"] == "checkpoint_url":
-            # load architecture
-            model = getattr(torchvision.models, model_info["arch"])()
-            if model_info["arch"] == "resnet50":
-                model.fc = torch.nn.Identity()
-
-                # load and cache state_dict
-            state_dict = torch.hub.load_state_dict_from_url(
-                model_info["checkpoint_url"],
-                map_location=torch.device("cpu"),
-                # IMPORTANT that this is unique as it will be used for caching
-                file_name=f"{model_name}.pth",
-            )
-
-            # load state dict to model
-            model.load_state_dict(state_dict, strict=True)
-
         else:
             raise ValueError(
                 f"Unknown model type {model_info['type']} for model {model_name}."

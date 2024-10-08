@@ -6,33 +6,70 @@ import math
 import torch
 import numpy as np
 from joblib import Parallel, delayed
-
+from sklearn.preprocessing import scale
 
 Array = np.ndarray
 Tensor = torch.Tensor
 
 
-# ------- Helper Function for Transformations  ------- #
+# ------- Helper Functions for Array Transformations ------- #
 
 
-def center(x: Array) -> Array:
-    return x - x.mean(0)
+def center(x: Array, axis: int = 0) -> Array:
+    """Center the input array by subtracting the mean along axis."""
+    return scale(x, with_mean=True, with_std=False, axis=axis)
 
 
-def standardize(x: Array) -> Array:
-    return (x - x.mean(0)) / x.std(0)
+def standardize(x: Array, axis: int = 0) -> Array:
+    """Standardize the input array by centering and scaling to unit variance."""
+    return scale(x, with_mean=True, with_std=True, axis=axis)
 
 
 def relu(x: Array) -> Array:
+    """Apply the Rectified Linear Unit (ReLU) function element-wise."""
     return np.maximum(0, x)
 
 
 def positive_shift(x: Array) -> Array:
+    """Shift all values in the array to be non-negative."""
     return x - np.min(x)
 
 
-def normalize(x: Array) -> Array:
-    return x / np.linalg.norm(x, axis=1, keepdims=True)
+def softmax(x: Array, axis: int = 1) -> Array:
+    """Apply the softmax function along axis 1."""
+    return np.exp(x) / np.sum(np.exp(x), axis=axis, keepdims=True)
+
+
+def log_softmax(x: Array, axis: int = 1) -> Array:
+    """Apply the log softmax function along axis 1."""
+    return np.log(softmax(x, axis=axis))
+
+
+def one_hot(x: Array, n_classes: int) -> Array:
+    """Convert integer labels to one-hot encoded vectors."""
+    return np.eye(n_classes)[x]
+
+
+def log_likelihood(x: Array, mean: Array, std: Array) -> Array:
+    """Calculate the log likelihood of the input array under a normal distribution."""
+    return -0.5 * np.log(2 * np.pi * std**2) - ((x - mean) ** 2) / (2 * std**2)
+
+
+def rss(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Calculate the residual sum of squares (RSS)."""
+    return np.sum((y_true - y_pred) ** 2)
+
+
+def aic_linear_regression(
+    y_true: np.ndarray, y_pred: np.ndarray, num_predictors: int
+) -> float:
+    """
+    Calculate the Akaike Information Criterion (AIC) for linear regression.
+    """
+    n = len(y_true)
+    k = num_predictors + 1  # +1 for the intercept
+    aic = n * np.log(rss(y_true, y_pred) / n) + 2 * k
+    return aic
 
 
 # ------- Helper Function for Variance Testing  ------- #
