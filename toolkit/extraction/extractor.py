@@ -78,6 +78,16 @@ def _extract_from_images_using_hook(model: HookModel, images: torch.Tensor):
     return logits, features
 
 
+def process_batch_features(features, token, average_spatial, flatten_features):
+    if token == "cls_token":
+        features = features[:, 0, :]
+    if average_spatial and features.ndim == 4:
+        features = features.mean(dim=(-2, -1))
+    if flatten_features:
+        features = features.flatten(start_dim=1)
+    return features
+
+
 @torch.no_grad()
 def extract_features_from_model(
     image_paths: list[str],
@@ -89,46 +99,37 @@ def extract_features_from_model(
     token: str | None = None,
     average_spatial: bool = False,
 ) -> np.ndarray:
-    # NOTE CLS_TOKEN and AVG_POOL of feature model is probably only applicable to DINO and MAE models.
     extractor, tsfm = build_feature_extractor(model_name, module_names, weights, source)
     extractor.eval()
     extractor.to(device)
     dataset = ImageDataset(image_paths, tsfm)
     dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
 
-    # Determine the total number of samples
+    # Initialize variables for feature storage
     num_samples = len(dataset)
-    batch_size = dataloader.batch_size
-
-    sample_images = next(iter(dataloader)).to(device)
-    sample_features = _extract_from_images_using_hook(extractor, sample_images)[1]
-    feature_shape = sample_features.shape[1:]
-
-    features = np.empty((num_samples, np.prod(feature_shape)), dtype=np.float32)
+    feature_shape = None
+    features = None
 
     start_idx = 0
     for images in tqdm(dataloader):
         images = images.to(device)
-        batch_logits, batch_features = _extract_from_images_using_hook(
-            extractor, images
+        _, batch_features = _extract_from_images_using_hook(extractor, images)
+
+        processed_features = process_batch_features(
+            batch_features, token, average_spatial, flatten_features
         )
 
-        batch_features = batch_features.squeeze().cpu().to(torch.float32).numpy()
-        batch_logits = batch_logits.squeeze().cpu().to(torch.float32).numpy()
+        # Determine feature shape and initialize the features array on the first batch
+        if features is None:
+            feature_shape = processed_features.shape[1:]
+            if token == "cls_token":
+                feature_shape = feature_shape[1:]
+            features = np.empty((num_samples, np.prod(feature_shape)), dtype=np.float32)
 
-        if batch_features.ndim == 3 and token == "cls_token":
-            batch_features = batch_features[:, 0, :]
-
-        if average_spatial and batch_features.ndim == 4:
-            batch_features = batch_features.mean(axis=(2, 3))
-
-        if flatten_features:
-            batch_features = batch_features.reshape(batch_features.shape[0], -1)
-
-        end_idx = min(start_idx + batch_size, num_samples)
-        features[start_idx:end_idx] = batch_features
+        end_idx = start_idx + len(processed_features)
+        features[start_idx:end_idx] = processed_features
         start_idx = end_idx
 
-        del images, batch_logits, batch_features
+        del images, batch_features
 
     return features
