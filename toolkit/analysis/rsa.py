@@ -2,16 +2,41 @@
 
 import torch
 import numpy as np
-import pandas as pd
 
 from tqdm import tqdm
 from numba import njit, prange
-from scipy.stats import pearsonr, spearmanr, rankdata
+from .stats import compute_similarity, compute_distance
+from scipy.stats import pearsonr, spearmanr
 from scipy.spatial.distance import pdist, squareform
 
 
 Array = np.ndarray
 Tensor = torch.Tensor
+
+
+def compute_rdm(X: Array, metric: str = "pearson") -> Array:
+    return compute_distance(X, X, metric)
+
+
+def compute_rsm(X: Array, metric: str = "pearson") -> Array:
+    return compute_similarity(X, X, metric)
+
+
+def correlate_rsms(
+    rsm_a: Array, rsm_b: Array, corr_type: str = "pearson", return_pval: bool = False
+) -> float | tuple[float, float]:
+    """Correlate the lower triangular parts of two rsms."""
+    if corr_type not in ["pearson", "spearman"]:
+        raise ValueError("Correlation must be 'pearson' or 'spearman'")
+
+    rsm_a = fill_diag(rsm_a)
+    rsm_b = fill_diag(rsm_b)
+
+    triu_inds = np.triu_indices(len(rsm_a), k=1)
+    corr_func = {"pearson": pearsonr, "spearman": spearmanr}[corr_type]
+    corr, p = corr_func(rsm_a[triu_inds], rsm_b[triu_inds])
+
+    return (corr, p) if return_pval else corr
 
 
 @njit(parallel=False, fastmath=False)
@@ -113,101 +138,3 @@ def reconstruct_rsm_torch_batched(
         rsm = rsm.cpu().numpy()
 
     return rsm
-
-
-def corrcoef_torch(X: Tensor, rowvar: bool = True) -> Tensor:
-    """PyTorch implementation of the numpy.corrcoef function."""
-    if not rowvar:
-        X = X.T  # Transpose to make rows represent variables if rowvar is False
-    X = X - torch.mean(X, dim=1, keepdim=True)
-    n = X.size(1) - 1
-    cov = (X @ X.T) / n
-    std = torch.sqrt(torch.diag(cov)).unsqueeze(1)
-    corr = cov / (std @ std.T)
-    return corr
-
-
-def pearson_correlation_matrix(F: Array | Tensor, **kwargs) -> Array:
-    # """Compute similarity matrix based on correlation distance (on the matrix-level).
-    if not isinstance(F, (Array, Tensor)):
-        raise ValueError("F must be either a numpy array or a torch tensor.")
-    if isinstance(F, Tensor):
-        return corrcoef_torch(F, rowvar=True)
-
-    return np.corrcoef(F, rowvar=True, **kwargs)
-
-
-def compute_correlation_coeff(mat_a: Array, mat_b, method: str = "pearson", **kwargs):
-    """Compute the correlation coefficient and p-value between two matrices."""
-    if mat_a.shape != mat_b.shape:
-        raise ValueError("A and B must have the same shape.")
-    if method == "pearson":
-        corr, pval = pearsonr(mat_a.flatten(), mat_b.flatten())
-    elif method == "spearman":
-        corr, pval = spearmanr(mat_a.flatten(), mat_b.flatten())
-    else:
-        raise ValueError(f"Method {method} not supported.")
-
-    return corr, pval
-
-
-def fill_diag(rsm: Array) -> Array:
-    """Fill main diagonal of the RSM with ones"""
-    assert np.allclose(rsm, rsm.T), "\nRSM is required to be a symmetric matrix\n"
-    rsm[np.eye(len(rsm)) == 1.0] = 1.0
-
-    return rsm
-
-
-def compute_rdm(X, method="correlation"):
-    assert method in ["correlation", "euclidean"]
-    if method == "euclidean":
-        rdm = squareform(pdist(X, metric="euclidean"))
-    else:
-        rsm = correlation_matrix(X)
-        rdm = 1 - rsm
-
-    return rdm
-
-
-def compute_rsm(X, method="correlation"):
-    assert method in ["correlation", "euclidean"]
-    if method == "euclidean":
-        rdm = squareform(pdist(X, metric="euclidean"))
-        rsm = 1 - rdm
-    else:
-        rsm = correlation_matrix(X)
-
-    return rsm
-
-
-def correlation_matrix(F, a_min=-1.0, a_max=1.0):
-    # """Compute dissimilarity matrix based on correlation distance (on the matrix-level).
-    # Same as np.corrcoef(rowvar=True)"""
-    F_c = F - F.mean(axis=1)[..., None]
-    cov = F_c @ F_c.T
-    l2_norms = np.linalg.norm(F_c, axis=1)  # compute vector l2-norm across rows
-    denom = np.outer(l2_norms, l2_norms) + 1e-12
-
-    corr_mat = cov / denom
-    corr_mat = np.nan_to_num(corr_mat, nan=0.0)
-    corr_mat = corr_mat.clip(min=a_min, max=a_max)
-    corr_mat = fill_diag(corr_mat)
-    return corr_mat
-
-
-def correlate_rsms(
-    rsm_a: Array, rsm_b: Array, corr_type: str = "pearson", return_pval: bool = False
-) -> float | tuple[float, float]:
-    """Correlate the lower triangular parts of two rsms."""
-    if corr_type not in ["pearson", "spearman"]:
-        raise ValueError("Correlation must be 'pearson' or 'spearman'")
-
-    rsm_a = fill_diag(rsm_a)
-    rsm_b = fill_diag(rsm_b)
-
-    triu_inds = np.triu_indices(len(rsm_a), k=1)
-    corr_func = {"pearson": pearsonr, "spearman": spearmanr}[corr_type]
-    corr, p = corr_func(rsm_a[triu_inds], rsm_b[triu_inds])
-
-    return (corr, p) if return_pval else corr

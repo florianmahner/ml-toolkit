@@ -2,14 +2,15 @@
 
 """ Statistical utilities"""
 
-import math
 import torch
 import numpy as np
-from joblib import Parallel, delayed
 from sklearn.preprocessing import scale
 
 Array = np.ndarray
 Tensor = torch.Tensor
+
+
+AVAILABLE_METRICS = ["pearson", "cosine", "euclidean"]
 
 
 # ------- Helper Functions for Array Transformations ------- #
@@ -90,7 +91,86 @@ def effective_dimensionality(X: Array) -> float:
     return np.sum(eigenvalues) ** 2 / np.sum(eigenvalues**2)
 
 
+# ------- Helper Functions for Similarity  ------- #
+
+
+def compute_similarity(x: Array, y: Array, metric: str) -> float | Array:
+    """Compute similarity between two matrices."""
+    if metric not in AVAILABLE_METRICS:
+        raise ValueError(f"Metric {metric} not supported.")
+    if metric == "pearson":
+        return pearson_similarity(x, y)
+    elif metric == "cosine":
+        return cosine_similarity(x, y)
+    elif metric == "euclidean":
+        return euclidean_similarity(x, y)
+
+
+def compute_distance(x: Array, y: Array, metric: str) -> float | Array:
+    """Compute distance between two matrices."""
+    if metric not in AVAILABLE_METRICS:
+        raise ValueError(f"Metric {metric} not supported.")
+    if metric == "pearson":
+        return pearson_distance(x, y)
+    elif metric == "cosine":
+        return cosine_distance(x, y)
+    elif metric == "euclidean":
+        return euclidean_distance(x, y)
+
+
+def pearson_similarity(x: Array, y: Array) -> float | Array:
+    """Pearson similarity between two matrices."""
+    return np.corrcoef(x, y, rowvar=False)
+
+
+def pearson_distance(x: Array, y: Array) -> float | Array:
+    """Pearson distance between two matrices."""
+    return 0.5 * (1 - pearson_similarity(x, y))
+
+
+def cosine_similarity(x: Array, y: Array) -> float | Array:
+    """Cosine similarity between two matrices."""
+    x_norm = np.linalg.norm(x, axis=1, keepdims=True)
+    y_norm = np.linalg.norm(y, axis=1, keepdims=True)
+    xy = x @ y.T / (x_norm * y_norm.T)
+    xy = xy.clip(-1, 1)
+    np.fill_diagonal(xy, 1)
+    return xy
+
+
+def cosine_distance(x: Array, y: Array) -> float | Array:
+    """Cosine distance between two matrices."""
+    return 0.5 * (1 - cosine_similarity(x, y))
+
+
+def euclidean_similarity(x: Array, y: Array) -> float | Array:
+    """Euclidean similarity between two matrices."""
+    distance = euclidean_distance(x, y)
+    s = 1 / (1 + distance)
+    np.fill_diagonal(s, 1)
+    return s
+
+
+def euclidean_distance(x: Array, y: Array) -> float | Array:
+    """Euclidean distance between two matrices."""
+    return np.linalg.norm(x - y, axis=1)
+
+
 # ------- Helper Function for Significance and Effect Size Testing  ------- #
+
+
+def compute_correlation_coeff(mat_a: Array, mat_b, method: str = "pearson", **kwargs):
+    """Compute the correlation coefficient and p-value between two matrices."""
+    if mat_a.shape != mat_b.shape:
+        raise ValueError("A and B must have the same shape.")
+    if method == "pearson":
+        corr, pval = pearsonr(mat_a.flatten(), mat_b.flatten())
+    elif method == "spearman":
+        corr, pval = spearmanr(mat_a.flatten(), mat_b.flatten())
+    else:
+        raise ValueError(f"Method {method} not supported.")
+
+    return corr, pval
 
 
 def vectorized_pearsonr(x: Array, y: Array) -> float | Array:
@@ -123,9 +203,10 @@ def spearman_brown_correction(reliability: float, split_factor: int) -> float:
 
 
 def split_half_reliability(data: list | Array, num_splits: int = 1000) -> float | Array:
-    """Bute the split-half reliability between two matrices.
+    """Split-half reliability by randomly splitting the data into two halves and
+    calculating the pearson correlation between the two halves.
     Args:
-        x (list | Array): The array to apply split half.
+        data (list | Array): The array to calculate split half reliability for.
         num_splits (int): The number of random splits for calculating reliability."""
     if isinstance(data, list):
         data = np.array(data)
@@ -143,153 +224,55 @@ def split_half_reliability(data: list | Array, num_splits: int = 1000) -> float 
     return corrected_reliability
 
 
-def reproducibility_across_embeddings(
-    i, embeddings, odd_mask, even_mask, n_embeddings, n_dimensions
-):
-    """Process a single embedding to calculate the split half reproducibility across all other embeddings and dimensions"""
-    reproducibility_across_embeddings = np.zeros((n_embeddings, n_dimensions))
-    best_matching_dimensions = np.zeros(n_dimensions)
-    for j in range(n_embeddings):
-        if i == j:
-            continue
-
-        emb_i = embeddings[i]
-        emb_j = embeddings[j]
-
-        corr_ij = vectorized_pearsonr(emb_i[odd_mask], emb_j[odd_mask])
-        highest_corrs = np.argmax(corr_ij, axis=1)
-
-        even_corrs = np.zeros(n_dimensions)
-        for k in range(n_dimensions):
-            base_even = emb_i[even_mask][:, k]
-            dim_match = highest_corrs[k]
-            comp_even = emb_j[even_mask][:, dim_match]
-            even_corrs[k] = vectorized_pearsonr(base_even, comp_even)[0, 0]
-
-        best_matching_dimensions[j] = np.argmax(even_corrs)
-
-        reproducibility_across_embeddings[j] = even_corrs
-
-    z_transformed = np.arctanh(reproducibility_across_embeddings)
-    average = np.mean(z_transformed, axis=0)
-    back_transformed = np.tanh(average)
-    return back_transformed, best_matching_dimensions
-
-
-def split_half_reliability_across_runs(
-    embeddings: np.ndarray, identifiers: str
-) -> dict[str, list]:
-    """
-    Compute the split-half reliability of each dimension for each model.
-
-    The method is as follows:
-    1. Split the data objects in half using an odd and even mask.
-    2. For a given model run, iterate across all dimensions $i$:
-        - Identify the dimension in all other models $k$ that has the highest correlation with dimension $i$,
-          calculated using the odd-masked data.
-        - For model $k$, correlate this identified dimension with dimension $i$ using the even-masked data.
-    This process results in a sampling distribution of Pearson r coefficients across all other model seeds.
-    The sampling distribution of Pearson r is then transformed using Fisher-z so that it becomes z-scored (i.e.,
-    normally distributed). The mean of this sampling distribution is taken as the average z-transformed
-    reliability score. Finally, this score is inverted to get the average Pearson r reliability score.
-
-    Parameters
-    ----------
-    embeddings : np.ndarray
-        Embeddings in the shape of (n_embeddings, n_objects, n_dimensions).
-
-    identifiers : str
-        Identifiers of the embeddings, which could be model names or seeds.
-
-    Returns
-    -------
-    dict
-        A dictionary with identifiers as keys and Pearson r values across all dimensions.
-
-
-    TODO - Take the pruned dimensions to calc fisher z!
-    """
-    assert (
-        embeddings.ndim == 3
-    ), "Embeddings must be 3-dimensional (n_embeddings, n_objects, n_dimensions)"
-    n_embeddings, n_objects, n_dimensions = embeddings.shape
-
-    np.random.seed(42)
-    odd_mask = np.random.choice([True, False], size=n_objects)
-    even_mask = np.invert(odd_mask)
-
-    results = Parallel(n_jobs=-1, verbose=10)(
-        delayed(reproducibility_across_embeddings)(
-            i, embeddings, odd_mask, even_mask, n_embeddings, n_dimensions
-        )
-        for i in range(n_embeddings)
-    )
-
-    reliabs, dims = zip(*results)
-    reliabs = [np.array(r) for r in reliabs]
-    dims = [np.array(d) for d in dims]
-
-    return reliabs, dims
-
-
 def fisher_z_transform(pearson_r: list | Array) -> float | Array:
     """Perform Fisher Z-transform on Pearson r values."""
     return np.arctanh(pearson_r)
 
 
 def average_pearson_r(pearson_r: list | Array, axis: int = 0) -> float | Array:
-    """Bute the average of pearson r values, by first fisher z-transforming the values
-    and then averaging them + transforming them back."""
+    """Average of pearson r values, by first fisher z-transforming the values
+    and then averaging them and transforming them back."""
     fisher_z = fisher_z_transform(pearson_r)
     mean_z = np.mean(fisher_z, axis=axis)
     return np.tanh(mean_z)
 
 
-def cosine_similarity(x: Array, y: Array) -> float | Array:
-    """Bute the cosine similarity between two matrices."""
-    x_norm = np.linalg.norm(x, axis=1, keepdims=True)
-    y_norm = np.linalg.norm(y, axis=1, keepdims=True)
-    xy = x @ y.T
-    return xy / (x_norm * y_norm.T)
-
-
-def dot_product_similarity(x: Array, y: Array) -> float | Array:
-    """Bute the dot product similarity between two matrices."""
-    return x @ y.T
-
-
-def euclidean_similarity(x: Array, y: Array) -> float | Array:
-    """Bute the euclidean similarity between two matrices."""
-    distance = np.linalg.norm(x - y, axis=1)
-    return 1 / (1 + distance)
-
-
 # ------- Helper Functions for Probability Densities  ------- #
 
 
+def _normal_pdf_numpy(x: Array, mean: Array, std: Array) -> Array:
+    """Compute the probability density function of a normal distribution."""
+    return np.exp(-0.5 * ((x - mean) / std) ** 2) / (std * np.sqrt(2 * np.pi))
+
+
+def _normal_pdf_tensor(x: Tensor, mean: Tensor, std: Tensor) -> Tensor:
+    """Compute the probability density function of a normal distribution."""
+    return torch.exp(-0.5 * ((x - mean) / std) ** 2) / (std * torch.sqrt(2 * torch.pi))
+
+
 def normal_pdf(
-    x: Array | Tensor, mean: Tensor | Array, std: Tensor | Array
-) -> Tensor | Array:
-    """Probability density function of a normal distribution."""
-    if x.shape != mean.shape or x.shape != std.shape:
+    x: Array | Tensor, mean: Array | Tensor, std: Array | Tensor
+) -> Array | Tensor:
+    """
+    Compute the probability density function of a normal distribution.
+    Args:
+        x (Array | Tensor): The input values.
+        mean (Array | Tensor): The mean of the distribution.
+        std (Array | Tensor): The standard deviation of the distribution.
+    """
+    # Check input shapes
+    if not (x.shape == mean.shape == std.shape):
         raise ValueError(
-            "Input arrays must have the same dimensions; "
-            f"x.shape = {x.shape}, mean.shape = {mean.shape}, std.shape = {std.shape}"
+            f"Input arrays must have the same shape. "
+            f"Shapes: x={x.shape}, mean={mean.shape}, std={std.shape}"
         )
-    # Check that all arrays are the same type
-    if not all(isinstance(x, type(mean)) for x in [x, mean, std]):
-        raise TypeError(
-            "Input arrays must be of the same type; "
-            f"x = {type(x)}, mean = {type(mean)}, std = {type(std)}"
-        )
-    if not isinstance(x, (Array, Tensor)):
-        raise TypeError(
-            "Input arrays must be of type Array or Tensor; " f"x = {type(x)}"
-        )
+
+        raise TypeError("All inputs must be of type Array or Tensor.")
+
+    if not all(isinstance(arr, type(x)) for arr in (mean, std)):
+        raise TypeError("All inputs must be of the same type (Array or Tensor).")
+
     if isinstance(x, Array):
-        pdf = np.exp(-((x - mean) ** 2) / (2 * std**2)) / (std * np.sqrt(2 * np.pi))
+        return _normal_pdf_numpy(x, mean, std)
     else:
-        pdf = torch.exp(-((x - mean) ** 2) / (2 * std**2)) / (
-            std * torch.sqrt(2 * math.pi)
-        )
-    return pdf
+        return _normal_pdf_tensor(x, mean, std)

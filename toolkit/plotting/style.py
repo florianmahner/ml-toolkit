@@ -1,13 +1,7 @@
 import os
-import matplotlib.pyplot as plt
 import matplotlib as mpl
 import seaborn as sns
 from typing import Any
-
-BOOL_TO_RC = {
-    "tight_layout": "figure.constrained_layout.use",
-    "despine": ["axes.spines.top", "axes.spines.right"],
-}
 
 
 def get_style_path(context: str) -> str:

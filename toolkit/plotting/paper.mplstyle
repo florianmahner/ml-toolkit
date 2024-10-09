@@ -1,5 +1,6 @@
 # Set default figure size
 figure.figsize : 6.4, 4.8
+figure.dpi : 600
 
 # Remove legend frame
 legend.frameon : False
@@ -8,12 +9,9 @@ legend.frameon : False
 savefig.bbox : tight
 savefig.pad_inches : 0.05
 
-# Enable tight layout for figures
-
-
 # Font settings
-# pdf.fonttype : 42
-# ps.fonttype : 42
+pdf.fonttype : 42
+ps.fonttype : 42
 
 
 

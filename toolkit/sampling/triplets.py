@@ -100,14 +100,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def cosine_matrix(
-    X: Array, a_min: float = -1.0, a_max: float = 1.0, eps: float = 1e-8
-) -> Array:
+def cosine_matrix(X: Array, a_min: float = -1.0, a_max: float = 1.0) -> Array:
     """Compute cosine-similarity matrix."""
-    num = X @ X.T
-    l2_norms = np.linalg.norm(X, axis=1)
-    denom = np.outer(l2_norms, l2_norms) + eps
-    S = (num / denom).clip(min=a_min, max=a_max)
+    X_norm = X / np.linalg.norm(X, axis=1, keepdims=True)
+    S = X_norm @ X_norm.T
+    S = S.clip(min=a_min, max=a_max)
     return S
 
 
@@ -242,6 +239,7 @@ class Sampler(object):
 
             if self.sample_type != "on_the_fly":
                 self.S = get_similarity_matrix(self.X, similarity=self.similarity)
+                breakpoint()
 
         self.n_objects, self.n_features = self.X.shape
 
