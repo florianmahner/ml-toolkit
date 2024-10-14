@@ -32,14 +32,16 @@ def load_model(
         print(
             "No weights specified, attempting to load model without pretrained weights."
         )
-    if source == "open_clip":
-        return OpenCLIPLoader.load(model_name, weights)
-    if source == "torchvision":
-        return TorchvisionModelLoader.load(model_name, weights)
-    elif source == "timm":
-        return TimmModelLoader.load(model_name, weights)
-    elif source == "ssl":
-        return SSLModelLoader.load(model_name, weights)
+    loaders = {
+        "open_clip": OpenCLIPLoader.load,
+        "torchvision": TorchvisionModelLoader.load,
+        "timm": TimmModelLoader.load,
+        "ssl": SSLModelLoader.load,
+    }
+
+    # Validate the source and load the model
+    if source in loaders:
+        return loaders[source](model_name, weights)
     else:
         raise ValueError(f"Source '{source}' is not recognized.")
 
