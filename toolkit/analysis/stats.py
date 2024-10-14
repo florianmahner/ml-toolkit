@@ -4,13 +4,10 @@
 
 import torch
 import numpy as np
-from sklearn.preprocessing import scale
+from scipy.stats import pearsonr, spearmanr
 
 Array = np.ndarray
 Tensor = torch.Tensor
-
-
-AVAILABLE_METRICS = ["pearson", "cosine", "euclidean"]
 
 
 # ------- Helper Functions for Array Transformations ------- #
@@ -18,12 +15,14 @@ AVAILABLE_METRICS = ["pearson", "cosine", "euclidean"]
 
 def center(x: Array, axis: int = 0) -> Array:
     """Center the input array by subtracting the mean along axis."""
-    return scale(x, with_mean=True, with_std=False, axis=axis)
+    return x - np.mean(x, axis=axis, keepdims=True)
 
 
 def standardize(x: Array, axis: int = 0) -> Array:
     """Standardize the input array by centering and scaling to unit variance."""
-    return scale(x, with_mean=True, with_std=True, axis=axis)
+    mean_x = np.mean(x, axis=axis, keepdims=True)
+    std_x = np.std(x, axis=axis, keepdims=True)
+    return (x - mean_x) / std_x
 
 
 def relu(x: Array) -> Array:
@@ -91,85 +90,26 @@ def effective_dimensionality(X: Array) -> float:
     return np.sum(eigenvalues) ** 2 / np.sum(eigenvalues**2)
 
 
-# ------- Helper Functions for Similarity  ------- #
-
-
-def compute_similarity(x: Array, y: Array, metric: str) -> float | Array:
-    """Compute similarity between two matrices."""
-    if metric not in AVAILABLE_METRICS:
-        raise ValueError(f"Metric {metric} not supported.")
-    if metric == "pearson":
-        return pearson_similarity(x, y)
-    elif metric == "cosine":
-        return cosine_similarity(x, y)
-    elif metric == "euclidean":
-        return euclidean_similarity(x, y)
-
-
-def compute_distance(x: Array, y: Array, metric: str) -> float | Array:
-    """Compute distance between two matrices."""
-    if metric not in AVAILABLE_METRICS:
-        raise ValueError(f"Metric {metric} not supported.")
-    if metric == "pearson":
-        return pearson_distance(x, y)
-    elif metric == "cosine":
-        return cosine_distance(x, y)
-    elif metric == "euclidean":
-        return euclidean_distance(x, y)
-
-
-def pearson_similarity(x: Array, y: Array) -> float | Array:
-    """Pearson similarity between two matrices."""
-    return np.corrcoef(x, y, rowvar=False)
-
-
-def pearson_distance(x: Array, y: Array) -> float | Array:
-    """Pearson distance between two matrices."""
-    return 0.5 * (1 - pearson_similarity(x, y))
-
-
-def cosine_similarity(x: Array, y: Array) -> float | Array:
-    """Cosine similarity between two matrices."""
-    x_norm = np.linalg.norm(x, axis=1, keepdims=True)
-    y_norm = np.linalg.norm(y, axis=1, keepdims=True)
-    xy = x @ y.T / (x_norm * y_norm.T)
-    xy = xy.clip(-1, 1)
-    np.fill_diagonal(xy, 1)
-    return xy
-
-
-def cosine_distance(x: Array, y: Array) -> float | Array:
-    """Cosine distance between two matrices."""
-    return 0.5 * (1 - cosine_similarity(x, y))
-
-
-def euclidean_similarity(x: Array, y: Array) -> float | Array:
-    """Euclidean similarity between two matrices."""
-    distance = euclidean_distance(x, y)
-    s = 1 / (1 + distance)
-    np.fill_diagonal(s, 1)
-    return s
-
-
-def euclidean_distance(x: Array, y: Array) -> float | Array:
-    """Euclidean distance between two matrices."""
-    return np.linalg.norm(x - y, axis=1)
-
-
 # ------- Helper Function for Significance and Effect Size Testing  ------- #
 
 
-def compute_correlation_coeff(mat_a: Array, mat_b, method: str = "pearson", **kwargs):
+def compute_correlation_coeff(x: Array, y: Array, method: str = "pearson"):
     """Compute the correlation coefficient and p-value between two matrices."""
-    if mat_a.shape != mat_b.shape:
-        raise ValueError("A and B must have the same shape.")
-    if method == "pearson":
-        corr, pval = pearsonr(mat_a.flatten(), mat_b.flatten())
-    elif method == "spearman":
-        corr, pval = spearmanr(mat_a.flatten(), mat_b.flatten())
-    else:
+    if x.shape != y.shape:
+        raise ValueError("x and y must have the same shape.")
+
+    # Dictionary mapping method names to functions
+    correlation_methods = {
+        "pearson": pearsonr,
+        "spearman": spearmanr,
+    }
+
+    # Validate the method
+    if method not in correlation_methods:
         raise ValueError(f"Method {method} not supported.")
 
+    # Compute the correlation using the selected method
+    corr, pval = correlation_methods[method](x.flatten(), y.flatten())
     return corr, pval
 
 

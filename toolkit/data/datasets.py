@@ -17,6 +17,23 @@ Array = np.ndarray
 Compose = torchvision.transforms.Compose
 
 
+def get_computer_vision_dataset(
+    dataset_name: str = "cifar100",
+    dataset_locator: str = "/SSD/fmahner",
+    transform: Compose | None = None,
+    **kwargs,
+) -> tuple[torch.utils.data.Dataset, torch.utils.data.Dataset]:
+    factory = DatasetFactory(dataset_locator)
+    train_dataset = factory.get_dataset(
+        dataset_name, train=True, transform=transform, **kwargs
+    )
+    test_dataset = factory.get_dataset(
+        dataset_name, train=False, transform=transform, **kwargs
+    )
+
+    return train_dataset, test_dataset
+
+
 class ImageDataset(torch.utils.data.Dataset):
     def __init__(self, image_paths: list[str], transform: Compose):
         self.image_paths = image_paths
@@ -231,49 +248,6 @@ class DatasetFactory:
         return dataset
 
 
-def get_computer_vision_dataset(
-    dataset_name: str = "cifar100",
-    dataset_locator: str = "/SSD/fmahner",
-    transform: Compose | None = None,
-    **kwargs,
-) -> tuple[torch.utils.data.Dataset, torch.utils.data.Dataset]:
-    factory = DatasetFactory(dataset_locator)
-    train_dataset = factory.get_dataset(
-        dataset_name, train=True, transform=transform, **kwargs
-    )
-    test_dataset = factory.get_dataset(
-        dataset_name, train=False, transform=transform, **kwargs
-    )
-
-    return train_dataset, test_dataset
-
-
-def create_few_shot_subset(
-    dataset: torch.utils.data.Dataset, samples_per_class: int = 5
-) -> torch.utils.data.Subset:
-    torch.manual_seed(0)
-
-    if hasattr(dataset, "targets"):
-        targets = dataset.targets
-    elif hasattr(dataset, "_labels"):
-        targets = dataset._labels
-    elif hasattr(dataset, "labels"):
-        targets = dataset.labels
-    classes = torch.unique(torch.tensor(targets))
-    few_shot_indices = []
-
-    for c in classes:
-        class_indices = torch.where(torch.tensor(targets) == c)[0]
-        selected_indices = class_indices[
-            torch.randperm(len(class_indices))[:samples_per_class]
-        ]
-        few_shot_indices.append(selected_indices)
-    few_shot_indices = torch.cat(few_shot_indices)
-    few_shot_subset = torch.utils.data.Subset(dataset, few_shot_indices)
-
-    return few_shot_subset
-
-
 class ThingsDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -439,25 +413,6 @@ class ImageNetKaggle(torch.utils.data.Dataset):
 
         else:
             return self._load_transform_image(self.samples[idx]), self.targets[idx]
-
-
-def create_finetuning_splits(
-    dataset: ImageNetKaggle, embedding: Array, train_frac: float = 0.8
-) -> tuple[list, list]:
-    """Creates finetuning splits based on embedding of objects and their class
-    labels"""
-    train_set, val_set = [], []
-
-    targets = torch.tensor(list(map(torch.tensor, dataset.targets)))
-    rnd_perm = np.random.permutation(np.arange(len(dataset)))
-    targets = targets[rnd_perm]
-    embedding = embedding[rnd_perm]
-    for i, y in enumerate(targets):
-        if i < int(len(dataset) * train_frac):
-            train_set.append((embedding[i], y))
-        else:
-            val_set.append((embedding[i], y))
-    return train_set, val_set
 
 
 def filter_sun397(dataset: torch.utils.data.Dataset, split_file: str):

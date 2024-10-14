@@ -11,128 +11,32 @@ import h5py
 import numpy as np
 
 from pathlib import Path
-from tomlparse import argparse
 from collections import Counter
 from dataclasses import dataclass
-from scipy.spatial.distance import cdist
 from typing import Union, Callable, Optional, Iterable
+
+from ..analysis.metrics import (
+    dot_similarity,
+    cosine_similarity,
+    euclidean_similarity,
+)
+
 
 Array = np.ndarray
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Extract features and tripletize from a dataset using a pretrained model and module"
-    )
-    parser.add_argument(
-        "--file_path",
-        type=str,
-        default="./data/image_data/things",
-        help="Path to the representation used to extract triplets",
-    )
-    parser.add_argument(
-        "--key",
-        type=str,
-        help="""If the file path is a .pkl file, specify the key to load the data 
-            (use hyphen separated keys for nested dictionaries)""",
-    )
-    parser.add_argument(
-        "--out_path",
-        type=str,
-        default="./data/triplets",
-        help="Path to save the triplets",
-    )
-    parser.add_argument(
-        "--sample_type",
-        type=str,
-        default="adaptive",
-        choices=["adaptive", "random", "on_the_fly"],
-        help="Random or adaptive sampling of triplets",
-    )
-    parser.add_argument(
-        "--n_samples",
-        type=int,
-        default=int(2e7),
-        help="Number of samples to use for tripletization",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=0, help="Random seed for tripletization"
-    )
-    parser.add_argument(
-        "--triplet_path",
-        type=str,
-        default=None,
-        help="Path to any triplets to use for sampling, i.e. compute ooo. based on these triplets",
-    )
-    parser.add_argument(
-        "--similarity",
-        type=str,
-        default="dot",
-        choices=["dot", "cosine", "euclidean"],
-        help="Similarity metric to use for tripletization",
-    )
-    parser.add_argument(
-        "--k",
-        type=int,
-        default=3,
-        help="Number of nearest neighbors to use. 3 = triplet, 2 pairwise",
-        choices=[2, 3],
-    )
-    parser.add_argument(
-        "--use_memmap",
-        action="store_true",
-        help="Use memmap to load the data",
-    )
-    parser.add_argument(
-        "--train_fraction",
-        type=float,
-        default=0.9,
-        help="Fraction of data to use for training",
-    )
-
-    parser.add_argument(
-        "--transform",
-        type=str,
-        default="none",
-        help="Transform to apply to the data",
-        choices=["none", "relu", "center", "zscore", "positive_shift"],
-    )
-    return parser.parse_args()
-
-
-def cosine_matrix(X: Array, a_min: float = -1.0, a_max: float = 1.0) -> Array:
-    """Compute cosine-similarity matrix."""
-    X_norm = X / np.linalg.norm(X, axis=1, keepdims=True)
-    S = X_norm @ X_norm.T
-    S = S.clip(min=a_min, max=a_max)
-    return S
-
-
-def dot_matrix(X: Array) -> Array:
-    """Compute dot-product matrix."""
-    S = X @ X.T
-    return S
-
-
-def euclidean_matrix(X: Array) -> Array:
-    """Compute euclidean similarity matrix."""
-    D = cdist(X, X, "euclidean")
-    S = 1 / (1 + D)
-    return S
-
-
 def get_similarity_matrix(X: Array, similarity: Union[str, Callable] = "dot") -> Array:
     similarity_functions = {
-        "cosine": cosine_matrix,
-        "dot": dot_matrix,
-        "euclidean": euclidean_matrix,
+        "cosine": cosine_similarity,
+        "dot": dot_similarity,
+        "euclidean": euclidean_similarity,
     }
     print(f"Using similarity function {similarity}")
     if callable(similarity):
-        S = similarity(X)
+        S = similarity(X, X)
     elif isinstance(similarity, str):
         try:
-            S = similarity_functions[similarity](X)
+            S = similarity_functions[similarity](X, X)
         except KeyError:
             raise ValueError(f"Similarity metric {similarity} not supported")
     return S
@@ -239,7 +143,6 @@ class Sampler(object):
 
             if self.sample_type != "on_the_fly":
                 self.S = get_similarity_matrix(self.X, similarity=self.similarity)
-                breakpoint()
 
         self.n_objects, self.n_features = self.X.shape
 
@@ -434,30 +337,19 @@ class Sampler(object):
 
         train_split, test_split = self.train_test_split(choices)
         percentage = int(self.train_fraction * 100)
-        with open(os.path.join(self.out_path, f"train_{percentage}.npy"), "wb") as f:
+        with open(
+            os.path.join(
+                self.out_path,
+                f"train_{percentage}.npy",
+            ),
+            "wb",
+        ) as f:
             np.save(f, train_split)
         with open(
-            os.path.join(self.out_path, f"test_{100 - percentage}.npy"), "wb"
+            os.path.join(
+                self.out_path,
+                f"test_{100 - percentage}.npy",
+            ),
+            "wb",
         ) as f:
             np.save(f, test_split)
-
-
-if __name__ == "__main__":
-    args = parse_args()
-
-    sampler = Sampler(
-        args.file_path,
-        args.out_path,
-        n_samples=args.n_samples,
-        k=args.k,
-        train_fraction=args.train_fraction,
-        seed=args.seed,
-        similarity=args.similarity,
-        triplet_path=args.triplet_path,
-        key=args.key,
-        transforms=args.transform,
-        sample_type=args.sample_type,
-        use_memmap=args.use_memmap,
-    )
-
-    sampler.run()
