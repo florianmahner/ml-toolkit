@@ -51,6 +51,7 @@ def build_feature_extractor(
     module_name: list[str] | str,
     weights: str | None = "DEFAULT",
     source: str = "torchvision",
+    feature_transform: callable[[Tensor], Tensor] | None = None,
 ) -> tuple[HookModel, torchvision.transforms.Compose]:
 
     if source not in SOURCES:
@@ -58,15 +59,8 @@ def build_feature_extractor(
             f"Source '{source}' is not recognized. Available sources: {SOURCES}."
         )
 
-    def transform_clip(x):
-        return x / x.norm(dim=-1, keepdim=True)
-
     model, image_transform = load_model(model_name, weights, source)
-
-    if source == "open_clip":
-        feature_transform = transform_clip
-    else:
-        feature_transform = lambda x: x
+    feature_transform = feature_transform or (lambda x: x)
 
     hook_model = HookModel(model, feature_transform=feature_transform)
     hook_model.register_hook(module_name)
@@ -129,7 +123,7 @@ def extract_features_from_model(
             features = np.empty((num_samples, np.prod(feature_shape)), dtype=np.float32)
 
         end_idx = start_idx + len(processed_features)
-        features[start_idx:end_idx] = processed_features
+        features[start_idx:end_idx] = processed_features.cpu().numpy()
         start_idx = end_idx
 
         del images, batch_features

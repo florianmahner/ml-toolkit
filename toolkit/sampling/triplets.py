@@ -15,10 +15,17 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Union, Callable, Optional, Iterable
 
-from ..analysis.metrics import (
+from ..analyses.metrics import (
     dot_similarity,
     cosine_similarity,
     euclidean_similarity,
+)
+
+from ..analyses.stats import (
+    relu,
+    positive_shift,
+    standardize,
+    center,
 )
 
 
@@ -50,21 +57,20 @@ def get_nested_data(X: dict, nested_key: str) -> Array:
 
 
 def transforms(X: Array, transform: str) -> Array:
-    available_transforms = ["relu", "center", "zscore", "positive_shift", "none"]
-    if transform not in available_transforms:
+    """Apply a transformation to the data."""
+    transform_functions = {
+        "relu": relu,
+        "center": center,
+        "zscore": standardize,
+        "positive_shift": positive_shift,
+        "none": lambda x: x,  # Identity function for 'none'
+    }
+
+    if transform not in transform_functions:
         raise ValueError(f"Transform {transform} not supported")
+
     print(f"Applying transform {transform}")
-    if transform == "none":
-        return X
-    if transform == "relu":
-        X = np.maximum(0, X)
-    elif transform == "center":
-        X = X - X.mean(0)
-    elif transform == "zscore":
-        X = (X - X.mean(0)) / X.std(0)
-    elif transform == "positive_shift":
-        X = X - X.min()
-    return X
+    return transform_functions[transform](X)
 
 
 def load_domain(
@@ -166,21 +172,21 @@ class Sampler(object):
 
     def get_choice_on_the_fly(self, triplet: Array) -> Array:
         combs = list(itertools.combinations(triplet, 2))
-        sims = [self.compute_similarity(comb[0], comb[1]) for comb in combs]
+        sims = [self.compute_similarity_on_the_fly(comb[0], comb[1]) for comb in combs]
         positive = combs[np.argmax(sims)]
         ooo = list(set(triplet).difference(set(positive)))
         choice = np.hstack((positive, ooo))
 
         return choice
 
-    def compute_similarity(self, idx1: int, idx2: int) -> float:
+    def compute_similarity_on_the_fly(self, idx1: int, idx2: int) -> float:
         """Compute the similarity between two indices without constructing the similarity matrix"""
         if self.similarity == "cosine":
-            return cosine_matrix(self.X[[idx1, idx2]])[0, 1]
+            return cosine_similarity(self.X[[idx1, idx2]])[0, 1]
         elif self.similarity == "dot":
-            return dot_matrix(self.X[[idx1, idx2]])[0, 1]
+            return dot_similarity(self.X[[idx1, idx2]])[0, 1]
         elif self.similarity == "euclidean":
-            return euclidean_matrix(self.X[[idx1, idx2]])[0, 1]
+            return euclidean_similarity(self.X[[idx1, idx2]])[0, 1]
         else:
             raise ValueError(f"Similarity metric {self.similarity} not supported")
 
@@ -346,10 +352,6 @@ class Sampler(object):
         ) as f:
             np.save(f, train_split)
         with open(
-            os.path.join(
-                self.out_path,
-                f"test_{100 - percentage}.npy",
-            ),
-            "wb",
+            os.path.join(self.out_path, f"test_{100 - percentage}.npy"), "wb"
         ) as f:
             np.save(f, test_split)

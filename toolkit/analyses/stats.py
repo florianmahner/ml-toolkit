@@ -13,16 +13,20 @@ Tensor = torch.Tensor
 # ------- Helper Functions for Array Transformations ------- #
 
 
-def center(x: Array, axis: int = 0) -> Array:
-    """Center the input array by subtracting the mean along axis."""
-    return x - np.mean(x, axis=axis, keepdims=True)
+def center(x: np.ndarray, axis: int = 0) -> np.ndarray:
+    """Center the input array by subtracting the mean along the specified axis."""
+    x = np.asarray(x, dtype=np.float64)
+    mean = np.nanmean(x, axis=axis, keepdims=True)
+    return x - mean
 
 
-def standardize(x: Array, axis: int = 0) -> Array:
+def standardize(x: np.ndarray, axis: int = 0) -> np.ndarray:
     """Standardize the input array by centering and scaling to unit variance."""
-    mean_x = np.mean(x, axis=axis, keepdims=True)
-    std_x = np.std(x, axis=axis, keepdims=True)
-    return (x - mean_x) / std_x
+    x = np.asarray(x, dtype=np.float64)
+    mean = np.nanmean(x, axis=axis, keepdims=True)
+    std = np.nanstd(x, axis=axis, keepdims=True, ddof=0)
+    std[std == 0] = 1  # Prevent division by zero
+    return (x - mean) / std
 
 
 def relu(x: Array) -> Array:
@@ -30,9 +34,23 @@ def relu(x: Array) -> Array:
     return np.maximum(0, x)
 
 
+def normalize_l2(x: Array, axis: int = 0, eps: float = 1e-8) -> Array:
+    """Normalize the input array to have unit L2 norm."""
+    x = np.asarray(x)
+    norms = np.sqrt(np.sum(x**2, axis=axis, keepdims=True))
+    return x / (norms + eps)
+
+
 def positive_shift(x: Array) -> Array:
     """Shift all values in the array to be non-negative."""
     return x - np.min(x)
+
+
+def positive_shift_and_scale(x: Array) -> Array:
+    """Shift all values in the array to be non-negative and scale to unit variance."""
+    x = positive_shift(x)
+    x = x / np.linalg.norm(x, axis=0, keepdims=True)
+    return x
 
 
 def softmax(x: Array, axis: int = 1) -> Array:

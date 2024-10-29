@@ -36,7 +36,7 @@ def set_plotting_style(
 
     current_style = sns.axes_style()
     sns.set_theme(
-        context="notebook",
+        # context="notebook",
         style=current_style,
         rc=mplstyle_params,
     )
