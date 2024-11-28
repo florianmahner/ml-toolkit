@@ -9,7 +9,14 @@ from sklearn.metrics.pairwise import pairwise_distances
 Array = np.ndarray
 
 
-AVAILABLE_METRICS = ("pearson", "cosine", "euclidean", "dot", "manhattan")
+AVAILABLE_METRICS = (
+    "pearson",
+    "cosine",
+    "euclidean",
+    "dot",
+    "manhattan",
+    "gaussian_kernel",
+)
 
 
 def validate_metric(metric: str):
@@ -17,7 +24,7 @@ def validate_metric(metric: str):
         raise ValueError(f"Metric {metric} not supported.")
 
 
-def compute_similarity(x: Array, y: Array, metric: str) -> float | Array:
+def compute_similarity(x: Array, y: Array, metric: str, **kwargs) -> float | Array:
     """Compute similarity between two matrices."""
     validate_metric(metric)
     similarity_functions = {
@@ -26,11 +33,12 @@ def compute_similarity(x: Array, y: Array, metric: str) -> float | Array:
         "euclidean": euclidean_similarity,
         "dot": dot_similarity,
         "manhattan": manhattan_similarity,
+        "gaussian_kernel": gaussian_kernel_similarity,
     }
-    return similarity_functions[metric](x, y)
+    return similarity_functions[metric](x, y, **kwargs)
 
 
-def compute_distance(x: Array, y: Array, metric: str) -> float | Array:
+def compute_distance(x: Array, y: Array, metric: str, **kwargs) -> float | Array:
     """Compute distance between two matrices."""
     validate_metric(metric)
     distance_functions = {
@@ -39,8 +47,9 @@ def compute_distance(x: Array, y: Array, metric: str) -> float | Array:
         "euclidean": euclidean_distance,
         "dot": dot_distance,
         "manhattan": manhattan_distance,
+        "gaussian_kernel": gaussian_kernel_distance,
     }
-    return distance_functions[metric](x, y)
+    return distance_functions[metric](x, y, **kwargs)
 
 
 def pearson_similarity(x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -118,3 +127,18 @@ def manhattan_distance(x: Array, y: Array) -> float | Array:
     """Manhattan distance between two matrices."""
     distance = pairwise_distances(x, y, metric="manhattan")
     return distance
+
+
+def gaussian_kernel_similarity(x: Array, y: Array, sigma: float) -> float | Array:
+    """Gaussian kernel similarity between two matrices."""
+    distance = euclidean_distance(x, y)
+    s = np.exp(-(distance**2) / (2 * sigma**2))
+    return s
+
+
+def gaussian_kernel_distance(x: Array, y: Array, sigma: float) -> float | Array:
+    """Gaussian kernel distance between two matrices."""
+    raise NotImplementedError(
+        "Gaussian kernel distance is not implemented."
+        "There is no intuitive interpretation of distance in the kernel space."
+    )
