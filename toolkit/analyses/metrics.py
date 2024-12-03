@@ -129,14 +129,19 @@ def manhattan_distance(x: Array, y: Array) -> float | Array:
     return distance
 
 
-def gaussian_kernel_similarity(x: Array, y: Array, sigma: float) -> float | Array:
-    """Gaussian kernel similarity between two matrices."""
+def gaussian_kernel_similarity(x: Array, y: Array, sigma: float = 1.0) -> float | Array:
+    """Gaussian kernel similarity between two matrices aka RBF kernel.
+
+    Params:
+        sigma: float, Controls the width of the kernel. Higher values lead to more
+            smooth similarity functions.
+    """
     distance = euclidean_distance(x, y)
     s = np.exp(-(distance**2) / (2 * sigma**2))
     return s
 
 
-def gaussian_kernel_distance(x: Array, y: Array, sigma: float) -> float | Array:
+def gaussian_kernel_distance(x: Array, y: Array, sigma: float = 1.0) -> float | Array:
     """Gaussian kernel distance between two matrices."""
     raise NotImplementedError(
         "Gaussian kernel distance is not implemented."

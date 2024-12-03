@@ -12,6 +12,7 @@ from ._timm import TimmModelLoader
 from ..data.datasets import ImageDataset
 
 from torch.utils.data import DataLoader
+from typing import Callable
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -51,7 +52,7 @@ def build_feature_extractor(
     module_name: list[str] | str,
     weights: str | None = "DEFAULT",
     source: str = "torchvision",
-    feature_transform: callable[[Tensor], Tensor] | None = None,
+    feature_transform: Callable[[Tensor], Tensor] | None = None,
 ) -> tuple[HookModel, torchvision.transforms.Compose]:
 
     if source not in SOURCES:
