@@ -142,8 +142,13 @@ def gaussian_kernel_similarity(x: Array, y: Array, sigma: float = 1.0) -> float 
 
 
 def gaussian_kernel_distance(x: Array, y: Array, sigma: float = 1.0) -> float | Array:
-    """Gaussian kernel distance between two matrices."""
+    """Placeholder for Gaussian kernel distance between two matrices.
+
+    Note: The Gaussian kernel is typically used as a similarity measure, not a distance.
+    In the Gaussian kernel space, the concept of distance is not directly applicable
+    or intuitive, as the kernel maps data into an infinite-dimensional space.
+    """
     raise NotImplementedError(
-        "Gaussian kernel distance is not implemented."
-        "There is no intuitive interpretation of distance in the kernel space."
+        "Gaussian kernel distance is not implemented. The Gaussian kernel is used for "
+        "similarity, not distance. Consider using Gaussian kernel similarity instead."
     )
