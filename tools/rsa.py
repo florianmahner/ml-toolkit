@@ -3,7 +3,7 @@
 import torch
 import numpy as np
 
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from numba import njit, prange
 from .metrics import compute_similarity, compute_distance
 from .stats import compute_correlation_coeff
