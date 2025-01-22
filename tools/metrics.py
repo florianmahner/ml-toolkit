@@ -4,7 +4,7 @@
 """Utilities for distance and similarity metrics"""
 
 import numpy as np
-from sklearn.metrics.pairwise import pairwise_distances
+from sklearn.metrics.pairwise import pairwise_distances, pairwise_kernels
 
 Array = np.ndarray
 
@@ -133,16 +133,27 @@ def manhattan_distance(x: Array, y: Array) -> float | Array:
     return distance
 
 
-def gaussian_kernel_similarity(x: Array, y: Array, sigma: float = 1.0) -> float | Array:
+def gaussian_kernel_similarity(
+    x: Array, y: Array, sigma: float | None = None
+) -> float | Array:
     """Gaussian kernel similarity between two matrices aka RBF kernel.
 
     Params:
+        x: Array, First input array.
+        y: Array, Second input array.
         sigma: float, Controls the width of the kernel. Higher values lead to more
-            smooth similarity functions.
+            smooth similarity functions. If not provided, it is estimated from the data.
     """
-    distance = euclidean_distance(x, y)
-    s = np.exp(-(distance**2) / (2 * sigma**2))
-    return s
+    if sigma is None:
+        print("Sigma not provided, estimating from data using median distance")
+        dist = pairwise_distances(x, metric="euclidean")
+        median_dist = np.median(dist)
+        sigma = median_dist
+
+    # convert sigma to sklearn kernel parameter
+    gamma = 1 / (2 * sigma**2)
+    similarity = pairwise_kernels(x, y, metric="rbf", gamma=gamma)
+    return similarity
 
 
 def gaussian_kernel_distance(x: Array, y: Array, sigma: float = 1.0) -> float | Array:

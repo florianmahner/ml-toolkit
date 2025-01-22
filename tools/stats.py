@@ -13,18 +13,26 @@ Tensor = torch.Tensor
 # ------- Helper Functions for Array Transformations ------- #
 
 
-def apply_transform(x: np.ndarray, transform: str, axis: int = 0) -> np.ndarray:
+def apply_transform(
+    x: np.ndarray, transform: str | list[str], axis: int = 0
+) -> np.ndarray:
     transform_to_func = {
         "center": center,
         "standardize": standardize,
         "normalize_l2": normalize_l2,
         "normalize_l1": normalize_l1,
         "positive_shift": positive_shift,
-        "positive_shift_and_scale": positive_shift_and_scale,
         "softmax": softmax,
         "log_softmax": log_softmax,
+        "log": log,
     }
-    return transform_to_func[transform](x, axis=axis)
+    if isinstance(transform, str):
+        transform = [transform]
+
+    for t in transform:
+        print(f"Applying {t}")
+        x = transform_to_func[t](x, axis=axis)
+    return x
 
 
 def center(x: np.ndarray, axis: int = 0) -> np.ndarray:
@@ -67,16 +75,14 @@ def positive_shift(x: Array) -> Array:
     return x - np.min(x)
 
 
-def positive_shift_and_scale(x: Array) -> Array:
-    """Shift all values in the array to be non-negative and scale to unit variance."""
-    x = positive_shift(x)
-    x = x / np.linalg.norm(x, axis=0, keepdims=True)
-    return x
-
-
 def softmax(x: Array, axis: int = 1) -> Array:
     """Apply the softmax function along axis 1."""
     return np.exp(x) / np.sum(np.exp(x), axis=axis, keepdims=True)
+
+
+def log(x: Array) -> Array:
+    """Log transform the input array."""
+    return np.log(x)
 
 
 def log_softmax(x: Array, axis: int = 1) -> Array:
