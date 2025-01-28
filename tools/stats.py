@@ -70,7 +70,7 @@ def normalize_l1(x: Array, axis: int = 0, eps: float = 1e-8) -> Array:
     return x / (norms + eps)
 
 
-def positive_shift(x: Array) -> Array:
+def positive_shift(x: Array, **kwargs) -> Array:
     """Shift all values in the array to be non-negative."""
     return x - np.min(x)
 

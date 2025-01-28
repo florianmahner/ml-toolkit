@@ -7,6 +7,7 @@ import glob
 import json
 import torch.utils
 import torchvision
+from scipy.io import loadmat
 
 import numpy as np
 
@@ -48,6 +49,35 @@ class ImageDataset(torch.utils.data.Dataset):
         if self.transform:
             image = self.transform(image)
         return image
+
+
+class ORL(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        root: str,
+        train: bool = True,
+        transform: Compose | None = None,
+        download: bool = False,
+        **kwargs,
+    ):
+        self.root = root
+        self.transform = transform
+
+        file = os.path.join(self.root, "ORL.mat")
+        if not os.path.exists(file):
+            raise FileNotFoundError(f"File {file} not found")
+        data = loadmat(file)
+        self.train_data = data["data"].reshape(-1, 92, 112)
+        self.targets = data["label"].squeeze()
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx: int):
+        image = self.images[idx]
+        if self.transform:
+            image = self.transform(image)
+        return image, self.labels[idx]
 
 
 class CIFAR100Coarse(torchvision.datasets.CIFAR100):
@@ -208,6 +238,8 @@ class DatasetFactory:
             "sun397": torchvision.datasets.SUN397,
             "ILSVRC": ImageNetKaggle,
             "things": ThingsDataset,
+            "orl": ORL,
+            "stl10": torchvision.datasets.STL10,
         }
 
         dataset_args = {
@@ -221,6 +253,8 @@ class DatasetFactory:
             "fashion": {"train": train},
             "ILSVRC": {"train": train},
             "things": {"tripletize": False},
+            "orl": {},
+            "stl10": {"split": "train" if train else "test"},
         }
 
         if dataset_name not in dataset_map:
