@@ -14,7 +14,7 @@ Tensor = torch.Tensor
 
 
 def apply_transform(
-    x: np.ndarray, transform: str | list[str], axis: int = 0
+    x: np.ndarray, transform: str | list[str], axis: int = 0, verbose: bool = False
 ) -> np.ndarray:
     transform_to_func = {
         "center": center,
@@ -30,7 +30,8 @@ def apply_transform(
         transform = [transform]
 
     for t in transform:
-        print(f"Applying {t}")
+        if verbose:
+            print(f"Applying {t}")
         x = transform_to_func[t](x, axis=axis)
     return x
 
