@@ -13,7 +13,7 @@ AVAILABLE_METRICS = (
     "pearson",
     "cosine",
     "euclidean",
-    "dot",
+    "linear",
     "manhattan",
     "gaussian_kernel",
 )
@@ -31,7 +31,7 @@ def compute_similarity(x: Array, y: Array, metric: str, **kwargs) -> float | Arr
         "pearson": pearson_similarity,
         "cosine": cosine_similarity,
         "euclidean": euclidean_similarity,
-        "dot": dot_similarity,
+        "linear": dot_similarity,
         "manhattan": manhattan_similarity,
         "gaussian_kernel": gaussian_kernel_similarity,
     }
@@ -45,7 +45,7 @@ def compute_distance(x: Array, y: Array, metric: str, **kwargs) -> float | Array
         "pearson": pearson_distance,
         "cosine": cosine_distance,
         "euclidean": euclidean_distance,
-        "dot": dot_distance,
+        "linear": dot_distance,
         "manhattan": manhattan_distance,
         "gaussian_kernel": gaussian_kernel_distance,
     }
