@@ -26,7 +26,12 @@ def apply_transform(
         "log_softmax": log_softmax,
         "log": log,
     }
+
     if isinstance(transform, str):
+        if transform not in transform_to_func:
+            raise ValueError(
+                f"Transform {transform} not found. Available transforms: {transform_to_func.keys()}"
+            )
         transform = [transform]
 
     for t in transform:
