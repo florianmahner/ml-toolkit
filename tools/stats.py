@@ -215,16 +215,22 @@ def split_half_reliability(data: list | Array, num_splits: int = 1000) -> float 
     return corrected_reliability
 
 
-def fisher_z_transform(pearson_r: list | Array) -> float | Array:
-    """Perform Fisher Z-transform on Pearson r values."""
+def fisher_z_transform(pearson_r: Array) -> Array:
+    """Perform Fisher Z-transform on Pearson r values, ensuring valid input range."""
+    pearson_r = np.asarray(pearson_r, dtype=np.float64)  # Ensure floating point type
+    eps = 1e-7  # Slightly larger than before for better numerical stability
+
+    # Replace invalid values (e.g., NaNs or infinite)
+    pearson_r = np.where(np.isfinite(pearson_r), pearson_r, np.nan)
+    pearson_r = np.clip(pearson_r, -1 + eps, 1 - eps)
+
     return np.arctanh(pearson_r)
 
-
-def average_pearson_r(pearson_r: list | Array, axis: int = 0) -> float | Array:
-    """Average of pearson r values, by first fisher z-transforming the values
-    and then averaging them and transforming them back."""
+def average_pearson_r(pearson_r: Array, axis: int = 0) -> Array:
+    """Compute the average Pearson r after Fisher Z-transform and inverse transformation."""
     fisher_z = fisher_z_transform(pearson_r)
-    mean_z = np.mean(fisher_z, axis=axis)
+    mean_z = np.nanmean(fisher_z, axis=axis)
+
     return np.tanh(mean_z)
 
 

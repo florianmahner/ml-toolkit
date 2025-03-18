@@ -53,7 +53,8 @@ def compute_distance(x: Array, y: Array, metric: str, **kwargs) -> float | Array
 
 
 def pearson_similarity(x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Pearson similarity between two matrices, returning an n x n similarity matrix."""
+    """Pearson similarity between two matrices, returning an n x n similarity matrix.
+    NOTE this is the same as np.corrcoef(x, y, rowvar=True)"""
     x_centered = x - x.mean(axis=1, keepdims=True)
     y_centered = y - y.mean(axis=1, keepdims=True)
     xy = x_centered @ y_centered.T
