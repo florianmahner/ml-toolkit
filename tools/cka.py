@@ -1,25 +1,42 @@
-import torch
-from collections.abc import Callable
+import numpy as np
 
+def linear_kernel(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """
+    Compute the linear kernel (dot-product) between matrices x and y.
+    """
+    return x @ y.T
 
-def linear_kernel(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    return x @ y.transpose(-2, -1)
-
-
-def hsic(k: torch.Tensor, l: torch.Tensor) -> torch.Tensor:
+def center_kernel(k: np.ndarray) -> np.ndarray:
+    """
+    Symmetrically center the kernel matrix K.
+    
+    K_centered = H K H, where H = I - 1/n * 11ᵀ
+    """
     n = k.shape[0]
-    h = torch.eye(n) - torch.ones((n, n)) / n
+    ones = np.ones((n, n)) / n
+    h = np.eye(n) - ones
+    return h @ k @ h
 
-    kh = torch.linalg.matmul(k, h)
-    lh = torch.linalg.matmul(l, h)
-    return torch.trace(kh @ lh) / ((n - 1) ** 2)
+def hsic(k: np.ndarray, l: np.ndarray) -> float:
+    """
+    Compute Hilbert-Schmidt Independence Criterion (HSIC) between
+    two centered kernel matrices k and l.
+    """
+    n = k.shape[0]
+    return np.trace(k @ l) / ((n - 1) ** 2)
 
-
-def cka(
-    x: torch.Tensor,
-    y: torch.Tensor,
-    kernel: Callable = linear_kernel,
-) -> torch.Tensor:
+def cka(x: np.ndarray, y: np.ndarray, kernel=linear_kernel) -> float:
+    """
+    Compute the Centered Kernel Alignment (CKA) between representations x and y.
+    """
     k = kernel(x, x)
-    l = kernel(y, y)
-    return hsic(k, l) / torch.sqrt(hsic(k, k) * hsic(l, l))
+    l = kernel(y, y)    
+
+    k_centered = center_kernel(k)
+    l_centered = center_kernel(l)
+
+    hsic_xy = hsic(k_centered, l_centered)
+    hsic_xx = hsic(k_centered, k_centered)
+    hsic_yy = hsic(l_centered, l_centered)
+
+    return hsic_xy / np.sqrt(hsic_xx * hsic_yy)
