@@ -5,7 +5,17 @@ description = "A collection of tools for machine learning and scientific computi
 authors = ["florianmahner <florian.mahner@icloud.com>"]
 readme = "README.md"
 packages = [
-    {include = "*", from = "src"},
+    {include = "rsa"},
+    {include = "cka"}, 
+    {include = "stats"},
+    {include = "metrics"},
+    {include = "cross_validation"},
+    {include = "extraction"},
+    {include = "data"},
+    {include = "plotting"},
+    {include = "sampling"},
+    {include = "things"},
+    {include = "utils"}
 ]
 
 [tool.poetry.dependencies]
