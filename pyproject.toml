@@ -6,7 +6,6 @@ authors = ["florianmahner <florian.mahner@icloud.com>"]
 readme = "README.md"
 packages = [
     {include = "*", from = "src"},
-    {include = "tools", from = "src/ml-toolkit"}
 ]
 
 [tool.poetry.dependencies]
